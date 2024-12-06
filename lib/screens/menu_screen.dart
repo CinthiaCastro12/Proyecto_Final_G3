@@ -1,30 +1,83 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'prestamos_screen.dart';
+import 'cuentas_screen.dart';
+import 'usuarios_screen.dart';
 import 'ahorros_screen.dart';
 import 'solicitudes_screen.dart';
 import 'simulacion_screen.dart';
-import 'login_screen.dart'; // Asegúrate de importar tu pantalla de login existente
+import 'login_screen.dart';
 
-class MenuScreen extends StatelessWidget {
+class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
 
   @override
+  State<MenuScreen> createState() => _MenuScreenState();
+}
+
+class _MenuScreenState extends State<MenuScreen> {
+  String? token;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadToken();
+  }
+
+  Future<void> _loadToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedToken = prefs.getString('accessToken');
+    setState(() {
+      token = storedToken;
+    });
+    debugPrint("Token guardado: $token");
+    if (token == null) {
+      // Si no hay token, redirige al login
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
+  }
+
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('accessToken');
+    await prefs.remove('refreshToken');
+
+    // Regresar al login
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (token == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Menú Principal'),
-        backgroundColor: Colors.teal, 
+        title: const Text(
+          'Menú Principal',
+          style: TextStyle(
+            color: Colors.white, // Título en blanco
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+          ),
+        ),
+        backgroundColor: Colors.teal.shade700,
+        centerTitle: true, // Centra el título
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
-              // Regresar al login
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              );
-            },
-          )
+            onPressed: _logout,
+            tooltip: 'Cerrar sesión',
+          ),
         ],
       ),
       body: Padding(
@@ -33,11 +86,21 @@ class MenuScreen extends StatelessWidget {
           children: [
             MenuCard(
               icon: Icons.account_balance,
-              title: 'Préstamos',
+              title: 'Clientes y préstamos',
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const PrestamosScreen()),
+                );
+              },
+            ),
+            MenuCard(
+              icon: Icons.person,
+              title: 'Cuentas',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CuentasScreen()),
                 );
               },
             ),
@@ -51,7 +114,6 @@ class MenuScreen extends StatelessWidget {
                 );
               },
             ),
-            
             MenuCard(
               icon: Icons.assignment,
               title: 'Solicitudes',
@@ -69,6 +131,16 @@ class MenuScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const SimulacionScreen()),
+                );
+              },
+            ),
+            MenuCard(
+              icon: Icons.person,
+              title: 'Usuarios',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const UsuariosScreen()),
                 );
               },
             ),
@@ -94,22 +166,30 @@ class MenuCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      elevation: 4,
-      child: ListTile(
-        leading: Icon(
-          icon,
-          color: Colors.teal,
-          size: 40,
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+      margin: const EdgeInsets.symmetric(vertical: 12.0),
+      elevation: 6,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
+      ),
+      shadowColor: Colors.black.withOpacity(0.2),
+      child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: ListTile(
+          leading: Icon(
+            icon,
+            color: Colors.teal.shade700,
+            size: 40,
+          ),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
+        ),
       ),
     );
   }

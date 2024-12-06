@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class PrestamosScreen extends StatefulWidget {
   const PrestamosScreen({super.key});
@@ -8,31 +12,76 @@ class PrestamosScreen extends StatefulWidget {
 }
 
 class _PrestamosScreenState extends State<PrestamosScreen> {
-  // Lista de clientes, cada cliente tiene su propio resumen y préstamos
-  List<Map<String, dynamic>> clientes = [
-    {
-      'id': 'CL001',
-      'nombre': 'Juan Pérez',
-      'saldo': 8000,
-      'prestamos': [
-        {
-          'codigo': 'P001',
-          'monto': '5000 LPS',
-          'estado': 'Pendiente',
-          'fecha': '2024-01-10',
-        },
-        {
-          'codigo': 'P002',
-          'monto': '3000 LPS',
-          'estado': 'Pagado',
-          'fecha': '2023-08-15',
-        },
-      ],
-    },
-  ];
+  String? token;
+  List<Map<String, dynamic>> clientes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadToken();
+  }
+
+  Future<void> _loadToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedToken = prefs.getString('accessToken');
+    setState(() {
+      token = storedToken;
+    });
+    if (token != null) {
+      _fetchClientesYPrestamos();
+    }
+  }
+
+  Future<void> _fetchClientesYPrestamos() async {
+    final baseUrl = dotenv.env['BASE_URL'] ?? 'https://default-url.com';
+    debugPrint("URL BACKEND: $baseUrl");
+    debugPrint("TOKEN ES: $token");
+
+    final clienteResponse = await http.get(
+      Uri.parse('$baseUrl/Customer/GetAllCustomer'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final prestamoResponse = await http.get(
+      Uri.parse('$baseUrl/Prestamo/GetAllDue'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (clienteResponse.statusCode == 200 && prestamoResponse.statusCode == 200) {
+      final List<dynamic> clientesData = json.decode(clienteResponse.body);
+      final List<dynamic> prestamosData = json.decode(prestamoResponse.body);
+
+      setState(() {
+        clientes = clientesData.map<Map<String, dynamic>>((cliente) {
+          final clientePrestamos = prestamosData
+              .where((prestamo) => prestamo['clienteId'] == cliente['customerId'])
+              .map((prestamo) {
+                return {
+                  'codigo': 'P${prestamo['prestamoId']}',
+                  'monto': '${prestamo['monto']} LPS',
+                  'estado': prestamo['estado'] ? 'Pendiente' : 'Pagado',
+                  'fecha': prestamo['fechaPrestamo'].split('T')[0],
+                };
+              }).toList();
+
+          return {
+            'id': 'CL${cliente['customerId']}',
+            'nombre': '${cliente['nombres']} ${cliente['apellidos']}',
+            'saldo': 0.0,
+            'prestamos': clientePrestamos,
+          };
+        }).toList();
+      });
+    } else {
+      debugPrint('Error al cargar los datos: ${clienteResponse.statusCode}, ${prestamoResponse.statusCode}');
+    }
+  }
 
   void _agregarCliente() {
-    // Función para agregar un nuevo cliente
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -71,7 +120,6 @@ class _PrestamosScreenState extends State<PrestamosScreen> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  // Agregar el nuevo cliente a la lista
                   clientes.add({
                     'id': 'CL${clientes.length + 1}',
                     'nombre': nombreController.text,
@@ -89,145 +137,41 @@ class _PrestamosScreenState extends State<PrestamosScreen> {
     );
   }
 
-  void _agregarPrestamo(int clienteIndex) {
-    // Función para agregar un préstamo a un cliente específico
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        TextEditingController montoController = TextEditingController();
-        TextEditingController fechaController = TextEditingController();
-
-        return AlertDialog(
-          title: const Text('Solicitar Nuevo Préstamo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: montoController,
-                decoration: const InputDecoration(
-                  labelText: 'Monto',
-                  hintText: 'Ingrese el monto solicitado',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              TextField(
-                controller: fechaController,
-                decoration: const InputDecoration(
-                  labelText: 'Fecha',
-                  hintText: 'Ingrese la fecha (YYYY-MM-DD)',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  // Agregar un nuevo préstamo al cliente
-                  clientes[clienteIndex]['prestamos'].add({
-                    'codigo': 'P${clientes[clienteIndex]['prestamos'].length + 1}',
-                    'monto': '${montoController.text} LPS',
-                    'estado': 'Pendiente',
-                    'fecha': fechaController.text,
-                  });
-                });
-                Navigator.of(context).pop();
-              },
-              child: const Text('Solicitar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _modificarEstadoPrestamo(int clienteIndex, int prestamoIndex) {
-    // Función para cambiar el estado del préstamo
-    String estadoActual = clientes[clienteIndex]['prestamos'][prestamoIndex]['estado'];
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        String nuevoEstado = estadoActual;
-
-        return AlertDialog(
-          title: const Text('Modificar Estado del Préstamo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButton<String>(
-                value: nuevoEstado,
-                onChanged: (String? newValue) {
-                  setState(() {
-                    nuevoEstado = newValue!;
-                  });
-                },
-                items: <String>['Pendiente', 'Pagado', 'Cancelado']
-                    .map<DropdownMenuItem<String>>((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  // Actualizar el estado del préstamo con el nuevo valor
-                  clientes[clienteIndex]['prestamos'][prestamoIndex]['estado'] = nuevoEstado;
-                });
-                Navigator.of(context).pop();
-              },
-              child: const Text('Modificar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Clientes y Préstamos'),
-        backgroundColor:Colors.teal,
-      ),
+  title: const Text(
+    'Clientes y Préstamos',
+    style: TextStyle(color: Colors.white), // Cambiar el color del texto a blanco
+  ),
+  backgroundColor: Colors.teal,
+  centerTitle: true, // Centrar el título
+),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Botón para agregar un nuevo cliente
             Center(
               child: ElevatedButton.icon(
                 onPressed: _agregarCliente,
-                icon: const Icon(Icons.person_add),
-                label: const Text('Agregar Cliente'),
+               icon: const Icon(Icons.person_add, color: Colors.white), // Cambiar el color del ícono a blanco
+              label: const Text(
+              'Agregar Cliente',
+                style: TextStyle(color: Colors.white), // Cambiar el color del texto a blanco
+               ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              
+                  backgroundColor: Colors.teal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 20),
-            // Lista de clientes
             Expanded(
               child: ListView.builder(
                 itemCount: clientes.length,
@@ -235,19 +179,22 @@ class _PrestamosScreenState extends State<PrestamosScreen> {
                   final cliente = clientes[clienteIndex];
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 8),
-                    elevation: 2,
+                    elevation: 5,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: ListTile(
-                      leading: const Icon(Icons.person, color: Colors.teal),
-                      title: Text(cliente['nombre']),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                      leading: const Icon(Icons.person, color: Colors.teal, size: 40),
+                      title: Text(cliente['nombre'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('ID: ${cliente['id']}'),
-                          Text('Saldo Total: ${cliente['saldo']} LPS'),
+                          Text('ID: ${cliente['id']}', style: const TextStyle(fontSize: 14)),
+                          Text('Saldo Total: ${cliente['saldo']} LPS', style: const TextStyle(fontSize: 14)),
                         ],
                       ),
                       onTap: () {
-                        // Mostrar los préstamos del cliente
                         showModalBottomSheet(
                           context: context,
                           builder: (context) {
@@ -257,26 +204,25 @@ class _PrestamosScreenState extends State<PrestamosScreen> {
                                 children: [
                                   Text(
                                     'Resumen de ${cliente['nombre']}',
-                                    style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold),
+                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(height: 10),
                                   Text('ID: ${cliente['id']}'),
                                   Text('Saldo Total: ${cliente['saldo']} LPS'),
                                   const SizedBox(height: 10),
                                   ElevatedButton.icon(
-                                    onPressed: () => _agregarPrestamo(clienteIndex),
+                                    onPressed: () {},
                                     icon: const Icon(Icons.add),
                                     label: const Text('Agregar Préstamo'),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor:Colors.teal,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 20, vertical: 12),
+                                      backgroundColor: Colors.teal,
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 10),
-                                  // Mostrar los préstamos del cliente
                                   Expanded(
                                     child: ListView.builder(
                                       itemCount: cliente['prestamos'].length,
@@ -284,8 +230,12 @@ class _PrestamosScreenState extends State<PrestamosScreen> {
                                         final prestamo = cliente['prestamos'][prestamoIndex];
                                         return Card(
                                           margin: const EdgeInsets.symmetric(vertical: 8),
-                                          elevation: 2,
+                                          elevation: 3,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
                                           child: ListTile(
+                                            contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
                                             title: Text('Código: ${prestamo['codigo']}'),
                                             subtitle: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -294,10 +244,6 @@ class _PrestamosScreenState extends State<PrestamosScreen> {
                                                 Text('Estado: ${prestamo['estado']}'),
                                                 Text('Fecha: ${prestamo['fecha']}'),
                                               ],
-                                            ),
-                                            trailing: IconButton(
-                                              icon: const Icon(Icons.edit),
-                                              onPressed: () => _modificarEstadoPrestamo(clienteIndex, prestamoIndex),
                                             ),
                                           ),
                                         );

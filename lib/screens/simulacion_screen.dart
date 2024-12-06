@@ -74,7 +74,7 @@ class _SimulacionScreenState extends State<SimulacionScreen> {
                     ],
                     indicatorColor: Colors.white,  // Cambié el color del indicador de la pestaña
                   ),
-                  Container(
+                  SizedBox(
                     height: 500, // Tamaño ajustado del contenido
                     child: const TabBarView(
                       children: [
@@ -94,7 +94,7 @@ class _SimulacionScreenState extends State<SimulacionScreen> {
 }
 
 class _SimulacionPrestamo extends StatefulWidget {
-  const _SimulacionPrestamo({Key? key}) : super(key: key);
+  const _SimulacionPrestamo({super.key});
 
   @override
   _SimulacionPrestamoState createState() => _SimulacionPrestamoState();
@@ -171,7 +171,7 @@ class _SimulacionPrestamoState extends State<_SimulacionPrestamo> {
 }
 
 class _SimulacionAhorro extends StatefulWidget {
-  const _SimulacionAhorro({Key? key}) : super(key: key);
+  const _SimulacionAhorro({super.key});
 
   @override
   _SimulacionAhorroState createState() => _SimulacionAhorroState();

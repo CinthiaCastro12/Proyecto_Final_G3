@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'menu_screen.dart';
+import 'package:http/http.dart' as http;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,62 +14,66 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController usernameController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  bool isLoading = false;
+  String errorMessage = '';
 
   @override
   void dispose() {
     usernameController.dispose();
-    emailController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _saveUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('username', usernameController.text);
-    await prefs.setString('email', emailController.text);
-    await prefs.setString('password', passwordController.text);
-  }
+  Future<void> _login() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = '';
+    });
 
-  Future<bool> _checkCredentials(String email, String password) async {
-    final prefs = await SharedPreferences.getInstance();
-    final storedEmail = prefs.getString('email');
-    final storedPassword = prefs.getString('password');
+    final baseUrl = dotenv.env['BASE_URL'] ?? 'https://default-url.com';
+    final url = Uri.parse('$baseUrl/Security/login');
+    final body = jsonEncode({
+      'userId': usernameController.text,
+      'password': passwordController.text,
+    });
+    final headers = {
+      'accept': '*/*',
+      'Content-Type': 'application/json',
+    };
 
-    return storedEmail == email && storedPassword == password;
-  }
+    try {
+      final response = await http.post(url, body: body, headers: headers);
 
-  Future<void> _recoverUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final username = prefs.getString('username') ?? 'Sin nombre';
-    final email = prefs.getString('email') ?? 'Sin correo';
-    final password = prefs.getString('password') ?? 'Sin contraseña';
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final accessToken = data['accessToken'];
+        final refreshToken = data['refreshToken'];
 
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Datos Recuperados'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Nombre: $username'),
-              Text('Correo: $email'),
-              Text('Contraseña: $password'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Cerrar'),
-            ),
-          ],
+        // Guardar los tokens en SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('accessToken', accessToken);
+        await prefs.setString('refreshToken', refreshToken);
+
+        // Navegar al menú principal
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MenuScreen()),
         );
-      },
-    );
+      } else {
+        setState(() {
+          errorMessage = 'Credenciales incorrectas';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = 'Error al conectar con el servidor.';
+      });
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
   }
 
   @override
@@ -95,13 +102,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-              // Campo de Nombre
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 30),
                 child: TextField(
                   controller: usernameController,
                   decoration: InputDecoration(
-                    hintText: 'Nombre',
+                    hintText: 'Usuario',
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
@@ -111,24 +117,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Campo de Correo
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 30),
-                child: TextField(
-                  controller: emailController,
-                  decoration: InputDecoration(
-                    hintText: 'Correo',
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-              ),
-              const SizedBox(height: 20),
-              // Campo de Contraseña
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 30),
                 child: TextField(
@@ -144,67 +132,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscureText: true,
                 ),
               ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () {
-                  _recoverUserData();
-                },
-                child: const Text(
-                  '¿Olvidó sus datos?',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  if (await _checkCredentials(
-                      emailController.text, passwordController.text)) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const MenuScreen(),
+              if (errorMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    errorMessage,
+                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                  ),
+                ),
+              isLoading
+                  ? const CircularProgressIndicator()
+                  : ElevatedButton(
+                      onPressed: _login,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF00C49A),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 50,
+                          vertical: 15,
+                        ),
                       ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Credenciales incorrectas')),
-                    );
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF00C49A),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 50,
-                    vertical: 15,
-                  ),
-                ),
-                child: const Text('Iniciar Sesión'),
-              ),
-              const SizedBox(height: 10),
-              ElevatedButton(
-                onPressed: () async {
-                  await _saveUserData();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Datos registrados con éxito')),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 50,
-                    vertical: 15,
-                  ),
-                ),
-                child: const Text('Registrar'),
-              ),
+                      child: const Text('Iniciar Sesión'),
+                    ),
             ],
           ),
         ),

@@ -265,10 +265,19 @@ class _AhorrosScreenState extends State<AhorrosScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.blueAccent,
-        title: const Text('Ahorros', style: TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0,
+     backgroundColor: Colors.teal,
+     title: const Center(
+     child: Text(
+      'Ahorros',
+      style: TextStyle(
+        fontWeight: FontWeight.bold,
+        color: Colors.white, // Color blanco para el texto
       ),
+    ),
+  ),
+  elevation: 0,
+),
+
       body: clientes.isEmpty
           ? const Center(child: Text('No hay clientes registrados.'))
           : ListView.builder(
@@ -306,7 +315,7 @@ class _AhorrosScreenState extends State<AhorrosScreen> {
                       // Agregar cuenta de ahorro
                       ListTile(
                         title: const Text('Agregar Cuenta de Ahorro'),
-                        leading: const Icon(Icons.account_balance_wallet, color: Colors.blueAccent),
+                        leading: const Icon(Icons.account_balance_wallet, color: Colors.teal),
                         onTap: () => abrirFormularioCuentaAhorro(index),
                       ),
                       // Listar cuentas de ahorro
@@ -317,7 +326,7 @@ class _AhorrosScreenState extends State<AhorrosScreen> {
                       // Agregar transacción
                       ListTile(
                         title: const Text('Agregar Transacción'),
-                        leading: const Icon(Icons.swap_horiz, color: Colors.blueAccent),
+                        leading: const Icon(Icons.swap_horiz, color: Colors.teal),
                         onTap: () => abrirFormularioTransaccion(index),
                       ),
                       // Listar transacciones
@@ -332,13 +341,9 @@ class _AhorrosScreenState extends State<AhorrosScreen> {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: abrirFormularioCliente,
-        backgroundColor: Colors.blueAccent,
+        backgroundColor: Colors.teal,
         child: const Icon(Icons.add),
       ),
     );
   }
-}
-
-void main() {
-  runApp(MaterialApp(home: AhorrosScreen()));
 }
